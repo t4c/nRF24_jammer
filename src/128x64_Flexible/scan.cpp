@@ -5,10 +5,8 @@ int scan_wifi_APs(int *channels, bool mode)
   if ( access_point == 0 )
     WiFi.softAPdisconnect();
   WiFi.mode(WIFI_STA);
-  int    channelCount     = 0;
-  int    networks         = WiFi.scanNetworks();
-  String current_ssid     = prefs.getString("ssid", default_ssid);
-  String current_password = prefs.getString("password", default_password);
+  int channelCount = 0;
+  int networks     = WiFi.scanNetworks();
 
   if ( mode )
   {
@@ -34,7 +32,7 @@ int scan_wifi_APs(int *channels, bool mode)
       }
     }
 
-    WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+    WiFi.softAP(ssid.c_str(), password.c_str());
     return channelCount;
   }
   else
@@ -60,7 +58,7 @@ int scan_wifi_APs(int *channels, bool mode)
         channelCount++;
     }
     if ( access_point == 0 )
-      WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+      WiFi.softAP(ssid.c_str(), password.c_str());
     return networks;
   }
 }

@@ -117,10 +117,8 @@ void wifi_deauth_all()
     }
   }
   esp_wifi_set_promiscuous(false);
-  String current_ssid     = prefs.getString("ssid", default_ssid);
-  String current_password = prefs.getString("password", default_password);
   if ( access_point == 0 )
-    WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+    WiFi.softAP(ssid.c_str(), password.c_str());
 }
 
 void wifi_deauth_scan()
@@ -161,10 +159,8 @@ void wifi_deauth_scan()
     scanCounter++;
   }
   esp_wifi_set_promiscuous(false);
-  String current_ssid     = prefs.getString("ssid", default_ssid);
-  String current_password = prefs.getString("password", default_password);
   if ( access_point == 0 )
-    WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+    WiFi.softAP(ssid.c_str(), password.c_str());
 }
 
 void wifi_deauth_channel(int channel)
@@ -192,10 +188,8 @@ void wifi_deauth_channel(int channel)
       break;
   }
   esp_wifi_set_promiscuous(false);
-  String current_ssid     = prefs.getString("ssid", default_ssid);
-  String current_password = prefs.getString("password", default_password);
   if ( access_point == 0 )
-    WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+    WiFi.softAP(ssid.c_str(), password.c_str());
 }
 
 void wifi_beacon_spam_random()
@@ -245,10 +239,8 @@ void wifi_beacon_spam_random()
   }
 
   digitalWrite(2, LOW);
-  String current_ssid     = prefs.getString("ssid", default_ssid);
-  String current_password = prefs.getString("password", default_password);
   if ( access_point == 0 )
-    WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+    WiFi.softAP(ssid.c_str(), password.c_str());
 }
 
 void wifi_beacon_spam_array()
@@ -282,8 +274,6 @@ void wifi_beacon_spam_array()
       break;
   }
   digitalWrite(2, LOW);
-  String current_ssid     = prefs.getString("ssid", default_ssid);
-  String current_password = prefs.getString("password", default_password);
   if ( access_point == 0 )
-    WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+    WiFi.softAP(ssid.c_str(), password.c_str());
 }
