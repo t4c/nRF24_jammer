@@ -8,6 +8,7 @@
 void handleRoot()
 {
   String main_html = FPSTR(html);
+
   switch ( bluetooth_jam_method )
   {
   case 0:
@@ -25,7 +26,39 @@ void handleRoot()
     main_html.replace("if (false) { //IsModulesConfigured", "if (true) { //IsModulesConfigured");
   }
 
+  String ssidsJson = "[";
+  for ( int ch = 1; ch <= 14; ch++ )
+  {
+    String escaped = APs_array[ch - 1];
+    escaped.replace("\\", "\\\\");
+    escaped.replace("\"", "\\\"");
+    escaped.replace("\n", "\\n");
+    ssidsJson += "\"" + escaped + "\"";
+    if ( ch < 14 )
+      ssidsJson += ",";
+  }
+  ssidsJson += "]";
+
+  String ssidPlaceholder = "let ssidsByChannel = [];";
+  String ssidReplacement = "let ssidsByChannel = " + ssidsJson + ";";
+  main_html.replace(ssidPlaceholder, ssidReplacement);
+
+  for ( int ch = 1; ch <= 14; ch++ )
+  {
+    String search  = "let ch" + String(ch) + " = 0;";
+    String replace = "let ch" + String(ch) + " = " + String(WiFiScanChannels[ch - 1]) + ";";
+    main_html.replace(search, replace);
+  }
+
   server.send(200, "text/html", main_html.c_str());
+
+  main_html.replace(ssidReplacement, ssidPlaceholder);
+  for ( int ch = 1; ch <= 14; ch++ )
+  {
+    String search  = "let ch" + String(ch) + " = " + String(WiFiScanChannels[ch - 1]) + ";";
+    String replace = "let ch" + String(ch) + " = 0;";
+    main_html.replace(search, replace);
+  }
 
   if ( nrf24_count <= 0 )
   {
@@ -67,71 +100,78 @@ void updateDisplay(int menuNum)
   display.display();
 }
 
-void handlernRF24Pins()
+void handlerSetSettings()
 {
-  nrf24_count     = server.arg("count").toInt();
-  String ceStr    = server.arg("ce");
-  String csnStr   = server.arg("csn");
-  auto   SplitStr = [](const String &str, int *arr, int maxCount) {
-    int idx   = 0;
+  logo                 = server.arg("logo").toInt();
+  display_setting      = server.arg("display").toInt();
+  buttons              = server.arg("button").toInt();
+  Separate_or_together = server.arg("sweep").toInt();
+  nrf_pa               = server.arg("pa").toInt();
+  bluetooth_jam_method = server.arg("bt_method").toInt();
+  drone_jam_method     = server.arg("drone_method").toInt();
+  misc_jam_method      = server.arg("misc_method").toInt();
+  ssid                 = server.arg("ssid");
+  password             = server.arg("password");
+  access_point         = server.arg("ap").toInt();
+
+  String beacon_list = server.arg("beacon");
+  String ce_list     = server.arg("ce");
+  String csn_list    = server.arg("csn");
+
+  auto parseTokens = [](const String &str, auto callback, int maxCount) -> int {
+    if ( str.length() == 0 )
+      return 0;
+
+    int count = 0;
     int start = 0;
-    while ( idx < maxCount )
+    while ( count < maxCount )
     {
       int sep = str.indexOf('|', start);
       if ( sep == -1 )
         sep = str.length();
-      String part = str.substring(start, sep);
-      arr[idx++]  = part.toInt();
+
+      String token = str.substring(start, sep);
+      token.trim();
+
+      if ( token.length() > 0 )
+      {
+        callback(token, count++);
+      }
+
       if ( sep == str.length() )
         break;
       start = sep + 1;
     }
+    return count;
   };
-  SplitStr(ceStr, ce_pins, nrf24_count);
-  SplitStr(csnStr, csn_pins, nrf24_count);
 
-  prefs.putInt("nRF24_count", nrf24_count);
-  prefs.putBytes("nRF24_ce_pins", ce_pins, sizeof(ce_pins));
-  prefs.putBytes("nRF24_csn_pins", csn_pins, sizeof(csn_pins));
-  server.sendHeader("Location", "/");
-  server.send(302, "text/plain", "");
-}
+  nrf24_count = parseTokens(ce_list, [](const String &token, int idx) { ce_pins[idx] = token.toInt(); }, 30);
 
-void handlerSSIDsArray()
-{
-  String ssidsStr = server.arg("ssids");
+  parseTokens(csn_list, [](const String &token, int idx) { csn_pins[idx] = token.toInt(); }, 30);
 
   memset(SSIDs_Array, 0, sizeof(SSIDs_Array));
+  parseTokens(beacon_list, [](const String &token, int idx) {
+    String ssid_str = token.length() > 31 ? token.substring(0, 31) : token;
+    strlcpy(SSIDs_Array[idx], ssid_str.c_str(), sizeof(SSIDs_Array[idx])); }, 100);
 
-  int idx   = 0;
-  int start = 0;
-  while ( idx < 100 && start < ssidsStr.length() )
-  {
-    int end = ssidsStr.indexOf('|', start);
-    if ( end == -1 )
-      end = ssidsStr.length();
-
-    String ssid = ssidsStr.substring(start, end);
-    ssid.trim();
-
-    if ( ssid.length() > 31 )
-      ssid = ssid.substring(0, 31);
-
-    if ( ssid.length() > 0 )
-    {
-      strlcpy(SSIDs_Array[idx], ssid.c_str(), 33);
-      idx++;
-    }
-
-    start = end + 1;
-    if ( end == ssidsStr.length() )
-      break;
-  }
+  prefs.putInt("logo_configs", logo);
+  prefs.putInt("display_configs", display_setting);
+  prefs.putInt("buttons_configs", buttons);
+  prefs.putInt("SorT_configs", Separate_or_together);
+  prefs.putInt("PA_configs", nrf_pa);
+  prefs.putInt("bt_configs", bluetooth_jam_method);
+  prefs.putInt("drone_configs", drone_jam_method);
+  prefs.putInt("misc_configs", misc_jam_method);
+  prefs.putInt("nRF24_count", nrf24_count);
+  prefs.putString("ssid", ssid);
+  prefs.putString("password", password);
+  prefs.putInt("AP_configs", access_point);
 
   prefs.putBytes("SSIDs_Array", SSIDs_Array, sizeof(SSIDs_Array));
+  prefs.putBytes("nRF24_ce_pins", ce_pins, sizeof(ce_pins));
+  prefs.putBytes("nRF24_csn_pins", csn_pins, sizeof(csn_pins));
 
-  server.sendHeader("Location", "/");
-  server.send(302, "text/plain", "");
+  server.send(200, "text/plain", "OK");
 }
 
 void handlenRF24Init()
@@ -140,84 +180,6 @@ void handlenRF24Init()
 
   prefs.getBytes("nRF24_ce_pins", ce_pins, sizeof(ce_pins));
   prefs.getBytes("nRF24_csn_pins", csn_pins, sizeof(csn_pins));
-}
-
-void WiFiChannelHandler()
-{
-  String html      = FPSTR(html_wifi_channel);
-  String ssidsJson = "[";
-  for ( int ch = 1; ch <= 14; ch++ )
-  {
-    String escaped = APs_array[ch - 1];
-    escaped.replace("\\", "\\\\");
-    escaped.replace("\"", "\\\"");
-    escaped.replace("\n", "\\n");
-    ssidsJson += "\"" + escaped + "\"";
-    if ( ch < 14 )
-      ssidsJson += ",";
-  }
-  ssidsJson += "]";
-
-  for ( int ch = 1; ch <= 14; ch++ )
-  {
-    String search  = "let ch" + String(ch) + " = 0;";
-    String replace = "let ch" + String(ch) + " = " + String(WiFiScanChannels[ch - 1]) + ";";
-    html.replace(search, replace);
-  }
-
-  String ssidPlaceholder = "let ssidsByChannel = [];";
-  String ssidReplacement = "let ssidsByChannel = " + ssidsJson + ";";
-  html.replace(ssidPlaceholder, ssidReplacement);
-
-  server.send(200, "text/html", html.c_str());
-
-  html.replace(ssidReplacement, ssidPlaceholder);
-  for ( int ch = 1; ch <= 14; ch++ )
-  {
-    String search  = "let ch" + String(ch) + " = " + String(WiFiScanChannels[ch - 1]) + ";";
-    String replace = "let ch" + String(ch) + " = 0;";
-    html.replace(search, replace);
-  }
-}
-
-void WiFiDeauthChannelHandler()
-{
-  String html      = FPSTR(html_wifi_channel);
-  String ssidsJson = "[";
-  for ( int ch = 1; ch <= 14; ch++ )
-  {
-    String escaped = APs_array[ch - 1];
-    escaped.replace("\\", "\\\\");
-    escaped.replace("\"", "\\\"");
-    escaped.replace("\n", "\\n");
-    ssidsJson += "\"" + escaped + "\"";
-    if ( ch < 14 )
-      ssidsJson += ",";
-  }
-  ssidsJson += "]";
-
-  for ( int ch = 1; ch <= 14; ch++ )
-  {
-    String search  = "let ch" + String(ch) + " = 0;";
-    String replace = "let ch" + String(ch) + " = " + String(WiFiScanChannels[ch - 1]) + ";";
-    html.replace(search, replace);
-  }
-
-  String ssidPlaceholder = "let ssidsByChannel = [];";
-  String ssidReplacement = "let ssidsByChannel = " + ssidsJson + ";";
-  html.replace(ssidPlaceholder, ssidReplacement);
-  html.replace("/wifi_selected_jam", "/wifi_selected_deauth");
-
-  server.send(200, "text/html", html.c_str());
-
-  html.replace("/wifi_selected_deauth", "/wifi_selected_jam");
-  html.replace(ssidReplacement, ssidPlaceholder);
-  for ( int ch = 1; ch <= 14; ch++ )
-  {
-    String search  = "let ch" + String(ch) + " = " + String(WiFiScanChannels[ch - 1]) + ";";
-    String replace = "let ch" + String(ch) + " = 0;";
-    html.replace(search, replace);
-  }
 }
 
 void RescanHandler()
@@ -323,127 +285,51 @@ void wifiDeauthChannelsHandler()
   updateDisplay(menu_number);
 }
 
-void nRF24SettingsHandler()
+void settingsHandler(String htmlResponse, int index)
 {
-  String html          = FPSTR(html_nrf24_settings);
-  String modulesScript = "<script>window.currentModules = [";
-  for ( int i = 0; i < nrf24_count; i++ )
-  {
-    modulesScript += "{ce: " + String(ce_pins[i]) + ", csn: " + String(csn_pins[i]) + "}";
-    if ( i < nrf24_count - 1 )
-    {
-      modulesScript += ",";
-    }
-  }
-  modulesScript += "];</script>";
-  html.replace("</body>", modulesScript + "</body>");
-  sendHtmlAndExecute(html.c_str());
-}
+  String request;
 
-void settingsHandler(String htmlResponse, int index, bool editable, int SettingNumber)
-{
-  switch ( SettingNumber )
-  {
-  case 0:
-    break;
-  case 1:
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", html_buttons_settings);
-    break;
-  case 2:
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", html_logo_settings);
-    break;
-  case 3:
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", html_misc_settings);
-    break;
-  case 4:
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", html_display_settings);
-    break;
-  case 5:
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", html_bluetooth_settings);
-    break;
-  case 6:
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", html_drone_settings);
-    break;
-  case 7:
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", html_separate_or_together);
-    break;
-  case 8:
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", html_nrf_pa_settings);
-    break;
-  case 9: {
-    String temp;
-    if ( prefs.isKey("SSIDs_Array") )
-    {
-      for ( int i = 0; i < 100; i++ )
-      {
-        temp += String(SSIDs_Array[i]);
-        if ( i == 99 || SSIDs_Array[i + 1][0] == '\0' )
-          break;
-        temp += '\n';
-      }
-    }
-    else
-      temp = "";
-    htmlResponse.replace("[||]EdItAbLe TeXt[||]", temp);
-    break;
-  }
-  }
   if ( index == 1010110 )
   {
     htmlResponse.replace("<div class=\"version-badge\">version</div>", "<div class=\"version-badge\">" + String(Version_Number) + "</div>");
   }
-  else if ( editable )
-    htmlResponse.replace("<!-- " + String(index) + " --><button class=\"btn\"", "<!-- " + String(index) + " --><button class=\"btn btn_installed\"");
+  else
+  {
+    String beacon_list = "";
+    String ce_list     = "";
+    String csn_list    = "";
+
+    for ( int module = 0; module < nrf24_count; module++ )
+    {
+      ce_list += String(ce_pins[module]);
+      csn_list += String(csn_pins[module]);
+
+      if ( module < nrf24_count - 1 )
+      {
+        ce_list += "|";
+        csn_list += "|";
+      }
+    }
+
+    if ( prefs.isKey("SSIDs_Array") )
+    {
+      for ( int i = 0; i < 100; i++ )
+      {
+        beacon_list += String(SSIDs_Array[i]);
+        if ( i == 99 || SSIDs_Array[i + 1][0] == '\0' )
+          break;
+        beacon_list += "|";
+      }
+    }
+
+    char buf[512];
+    snprintf(buf, sizeof(buf), "logo=%d;display=%d;button=%d;sweep=%d;pa=%d;bt=%d;drone=%d;misc=%d;ssid=%s;password=%s;beacon=%s;ce=%s;csn=%s;", logo, display_setting, buttons, Separate_or_together, nrf_pa, bluetooth_jam_method, drone_jam_method, misc_jam_method, ssid.c_str(), password.c_str(), beacon_list.c_str(), ce_list.c_str(), csn_list.c_str());
+    request = String(buf);
+
+    htmlResponse.replace("[||]EdItAbLe TeXt[||]", request);
+  }
 
   sendHtmlAndExecute(htmlResponse.c_str());
-
-  switch ( SettingNumber )
-  {
-  case 0:
-    break;
-  case 1:
-    htmlResponse.replace(html_buttons_settings, "[||]EdItAbLe TeXt[||]");
-    break;
-  case 2:
-    htmlResponse.replace(html_logo_settings, "[||]EdItAbLe TeXt[||]");
-    break;
-  case 3:
-    htmlResponse.replace(html_misc_settings, "[||]EdItAbLe TeXt[||]");
-    break;
-  case 4:
-    htmlResponse.replace(html_display_settings, "[||]EdItAbLe TeXt[||]");
-    break;
-  case 5:
-    htmlResponse.replace(html_bluetooth_settings, "[||]EdItAbLe TeXt[||]");
-    break;
-  case 6:
-    htmlResponse.replace(html_drone_settings, "[||]EdItAbLe TeXt[||]");
-    break;
-  case 7:
-    htmlResponse.replace(html_separate_or_together, "[||]EdItAbLe TeXt[||]");
-    break;
-  case 8:
-    htmlResponse.replace(html_nrf_pa_settings, "[||]EdItAbLe TeXt[||]");
-    break;
-  }
-  if ( index == 1010110 )
-  {
-    htmlResponse.replace("<div class=\"version-badge\">" + String(Version_Number) + "</div>", "<div class=\"version-badge\">version</div>");
-  }
-  else if ( editable )
-    htmlResponse.replace("<!-- " + String(index) + " --><button class=\"btn btn_installed\"", "<!-- " + String(index) + " --><button class=\"btn\"");
-}
-
-void storeEEPROMAndReset(const char *index, int value, int &targetVar)
-{
-  settingsHandler(String(FPSTR(html_pls_reboot)), 0, false, 0);
-  display.clearDisplay();
-  display.drawBitmap(0, 0, bitmap_pls_reboot, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
-  display.display();
-
-  prefs.putInt(index, value);
-  targetVar = value;
-  ESP.restart();
 }
 
 void storeEEPROMAndSet(const char *index, int value, int &targetVar)
@@ -454,35 +340,11 @@ void storeEEPROMAndSet(const char *index, int value, int &targetVar)
   server.send(302, "text/plain", "");
 }
 
-void registerRoute(const char *path, void (*handler)())
-{
-  server.on(path, handler);
-}
-
 void saveWiFiSettings(const char *new_ssid, const char *new_password)
 {
   prefs.putString("ssid", new_ssid);
 
   prefs.putString("password", new_password);
-}
-
-void handleSaveWiFiSettings()
-{
-  String new_ssid     = server.arg("ssid");
-  String new_password = server.arg("password");
-
-  if ( new_ssid == "" && new_password == "" )
-  {
-    server.send_P(200, "text/html", html_pls_reboot);
-    storeEEPROMAndSet("AP_configs", 1, access_point);
-    return;
-  }
-
-  saveWiFiSettings(new_ssid.c_str(), new_password.c_str());
-
-  server.send_P(200, "text/html", html_pls_reboot);
-  delay(1000);
-  ESP.restart();
 }
 
 void handleResetWiFiSettings()
@@ -608,7 +470,7 @@ void misc()
           else
           {
             display_info("Jamming Started");
-            jamHandler(misc_jam, "Jamming from " + String(channel1) + " to " + String(channel2), bitmap_misc_jammer, false, false, true, false, channel1, channel2);
+            jamHandler(misc_jam, "Jamming from " + String(channel1) + " to " + String(channel2), nullptr, false, false, true, false, channel1, channel2);
             break;
           }
         }
@@ -708,11 +570,11 @@ void ble_select()
     display.display();
     if ( flag )
     {
-      ble_advertising_jam();
+      jamHandler(ble_advertising_jam, String("BLE AD Jam"), bitmap_ble_jam, false, true);
     }
     else
     {
-      ble_data_jam();
+      jamHandler(ble_data_jam, String("BLE Data Jam"), bitmap_ble_jam, true, false);
     }
   };
 
@@ -860,10 +722,8 @@ void wifi_select()
     display.setCursor(0, 10);
     display.println("Finded " + String(networks) + " APs");
     display.display();
-    String current_ssid     = prefs.getString("ssid", default_ssid);
-    String current_password = prefs.getString("password", default_password);
     if ( access_point == 0 )
-      WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+      WiFi.softAP(ssid.c_str(), password.c_str());
     delay(1000);
   };
 
@@ -880,10 +740,8 @@ void wifi_select()
     display.setCursor(0, 10);
     display.println("Finded " + String(NumberChannels) + " active ch's");
     display.display();
-    String current_ssid     = prefs.getString("ssid", default_ssid);
-    String current_password = prefs.getString("password", default_password);
     if ( access_point == 0 )
-      WiFi.softAP(current_ssid.c_str(), current_password.c_str());
+      WiFi.softAP(ssid.c_str(), password.c_str());
     delay(1000);
   };
 
@@ -929,8 +787,8 @@ void wifi_select()
           btnPrevious.tick();
           while ( !btnOK.isSingle() )
           {
-            jamHandler(wifi_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
-            if ( btnOK.isSingle() )
+            bool exit = jamHandler(wifi_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
+            if ( btnOK.isSingle() || exit )
               break;
             attackHandler(String("WiFi Deauthing"), wifi_deauth_all, bitmap_wifi_deauth);
           }
@@ -987,8 +845,8 @@ void wifi_select()
                 display.drawBitmap(0, 0, bitmap_wifi_jam, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
                 display.display();
                 Serial.println(flag - 1);
-                jamHandler(wifi_channel, "Jamming WiFi channel", bitmap_wifi_jam, false, false, false, false, flag - 1, 0);
-                if ( btnOK.isSingle() )
+                bool exit = jamHandler(wifi_channel, "Jamming WiFi channel", bitmap_wifi_jam, false, false, false, false, flag - 1, 0);
+                if ( btnOK.isSingle() || exit )
                   break;
                 display.clearDisplay();
                 display.drawBitmap(0, 0, bitmap_wifi_deauth, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
@@ -1007,8 +865,8 @@ void wifi_select()
           scan_wifi_channels();
           while ( !btnOK.isSingle() )
           {
-            jamHandler(wifi_scan_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
-            if ( btnOK.isSingle() )
+            bool exit = jamHandler(wifi_scan_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
+            if ( btnOK.isSingle() || exit )
               break;
             attackHandler(String("WiFi Deauthing"), wifi_deauth_scan, bitmap_wifi_deauth);
           }
@@ -1076,8 +934,8 @@ void wifi_select()
           btnPrevious.tick();
           while ( !btnOK.isSingle() )
           {
-            jamHandler(wifi_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
-            if ( btnOK.isSingle() )
+            bool exit = jamHandler(wifi_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
+            if ( btnOK.isSingle() || exit )
               break;
             attackHandler(String("WiFi Deauthing"), wifi_deauth_all, bitmap_wifi_deauth);
           }
@@ -1134,8 +992,8 @@ void wifi_select()
                 display.drawBitmap(0, 0, bitmap_wifi_jam, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
                 display.display();
                 Serial.println(flag - 1);
-                jamHandler(wifi_channel, "Jamming WiFi channel", bitmap_wifi_jam, false, false, false, false, flag - 1, 0);
-                if ( btnOK.isSingle() )
+                bool exit = jamHandler(wifi_channel, "Jamming WiFi channel", bitmap_wifi_jam, false, false, false, false, flag - 1, 0);
+                if ( btnOK.isSingle() || exit )
                   break;
                 display.clearDisplay();
                 display.drawBitmap(0, 0, bitmap_wifi_deauth, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
@@ -1154,8 +1012,8 @@ void wifi_select()
           scan_wifi_channels();
           while ( !btnOK.isSingle() )
           {
-            jamHandler(wifi_scan_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
-            if ( btnOK.isSingle() )
+            bool exit = jamHandler(wifi_scan_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
+            if ( btnOK.isSingle() || exit )
               break;
             attackHandler(String("WiFi Deauthing"), wifi_deauth_scan, bitmap_wifi_deauth);
           }
@@ -1236,8 +1094,8 @@ void wifi_select()
           btnPrevious.tick();
           while ( !btnOK.isSingle() )
           {
-            jamHandler(wifi_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
-            if ( btnOK.isSingle() )
+            bool exit = jamHandler(wifi_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
+            if ( btnOK.isSingle() || exit )
               break;
             attackHandler(String("WiFi Deauthing"), wifi_deauth_all, bitmap_wifi_deauth);
           }
@@ -1304,8 +1162,8 @@ void wifi_select()
                 display.clearDisplay();
                 display.drawBitmap(0, 0, bitmap_wifi_jam, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
                 display.display();
-                jamHandler(wifi_channel, "Jamming WiFi channel", bitmap_wifi_jam, false, false, false, false, flag - 1, 0);
-                if ( btnOK.isSingle() )
+                bool exit = jamHandler(wifi_channel, "Jamming WiFi channel", bitmap_wifi_jam, false, false, false, false, flag - 1, 0);
+                if ( btnOK.isSingle() || exit )
                   break;
                 display.clearDisplay();
                 display.drawBitmap(0, 0, bitmap_wifi_deauth, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
@@ -1324,8 +1182,8 @@ void wifi_select()
           scan_wifi_channels();
           while ( !btnOK.isSingle() )
           {
-            jamHandler(wifi_scan_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
-            if ( btnOK.isSingle() )
+            bool exit = jamHandler(wifi_scan_jam, String("WiFi Jam"), bitmap_wifi_jam, false, true);
+            if ( btnOK.isSingle() || exit )
               break;
             attackHandler(String("WiFi Deauthing"), wifi_deauth_scan, bitmap_wifi_deauth);
           }
@@ -1381,17 +1239,6 @@ void wifi_select()
   }
 }
 
-void access_poin_off()
-{
-  settingsHandler(String(FPSTR(html_pls_reboot)), 0, false, 0);
-  storeEEPROMAndSet("AP_configs", 1, access_point);
-  display.clearDisplay();
-  display.drawBitmap(0, 0, bitmap_pls_reboot, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
-  display.display();
-  delay(1000);
-  ESP.restart();
-}
-
 void setup()
 {
   Serial.begin(115200);
@@ -1404,12 +1251,12 @@ void setup()
 
   handlenRF24Init();
 
-  bluetooth_jam_method = prefs.getInt("bl_jam_configs", 0);
-  drone_jam_method     = prefs.getInt("drone_jam_configs", 0);
+  bluetooth_jam_method = prefs.getInt("bt_configs", 0);
+  drone_jam_method     = prefs.getInt("drone_configs", 0);
   display_setting      = prefs.getInt("display_configs", 0);
-  wifi_jam_method      = prefs.getInt("wifi_jam_configs", 0);
+  wifi_jam_method      = prefs.getInt("wifi_configs", 0);
   nrf_pa               = prefs.getInt("PA_configs", 0);
-  misc_jam_method      = prefs.getInt("mics_jam_configs", 0);
+  misc_jam_method      = prefs.getInt("misc_configs", 0);
   logo                 = prefs.getInt("logo_configs", 0);
   access_point         = prefs.getInt("AP_configs", 0);
   buttons              = prefs.getInt("buttons_configs", 0);
@@ -1445,13 +1292,13 @@ void setup()
 
   if ( access_point == 0 )
   {
-    String current_ssid     = prefs.getString("ssid", default_ssid);
-    String current_password = prefs.getString("password", default_password);
+    ssid     = prefs.getString("ssid", default_ssid);
+    password = prefs.getString("password", default_password);
 
     WiFi.mode(WIFI_AP);
     delay(100);
 
-    if ( WiFi.softAP(current_ssid.c_str(), current_password.c_str()) )
+    if ( WiFi.softAP(ssid.c_str(), password.c_str()) )
     {
       IPAddress apIp = WiFi.softAPIP();
       if ( apIp != IPAddress((uint32_t)0) )
@@ -1460,50 +1307,35 @@ void setup()
       }
     }
 
-    registerRoute("/", handleRoot);
-    registerRoute("/bluetooth_jam", []() { jamHandler(bluetooth_jam, String("Bluetooth Jamming"), bitmap_bluetooth_jam, true, false); });
-    registerRoute("/drone_jam", []() { jamHandler(drone_jam, String("Drone Jamming"), bitmap_drone_jam, true, false); });
-    registerRoute("/wifi_jam", []() { jamHandler(wifi_jam, String("WiFi Jamming"), bitmap_wifi_jam, false, false); });
-    registerRoute("/wifi_deauth_all", []() { attackHandler(String("WiFi Deauthing"), wifi_deauth_all, bitmap_wifi_deauth); });
-    registerRoute("/wifi_scan_jam", []() { jamHandler(wifi_scan_jam, String("WiFi Jamming"), bitmap_wifi_jam, false, false, false, true); });
-    registerRoute("/wifi_deauth_scan", []() { attackScanHandler(String("WiFi Deauthing"), wifi_deauth_scan, bitmap_wifi_deauth); });
-    registerRoute("/wifi_random_spam", []() { attackScanHandler(String("WiFi Beacon Spam"), wifi_beacon_spam_random, bitmap_beacon_spaming); });
-    registerRoute("/wifi_array_spam", []() { attackScanHandler(String("WiFi Beacon Spam"), wifi_beacon_spam_array, bitmap_beacon_spaming); });
-    registerRoute("/ble_advertising_jam", []() { jamHandler(ble_advertising_jam, String("BLE Jamming"), bitmap_ble_jam, false, false); });
-    registerRoute("/ble_data_jam", []() { jamHandler(ble_data_jam, String("BLE Jamming"), bitmap_ble_jam, true, false); });
-    registerRoute("/zigbee_jam", []() { jamHandler(zigbee_jam, String("Zigbee Jamming"), bitmap_zigbee_jam, false, false); });
-    registerRoute("/misc_jammer", []() { sendHtmlAndExecute(html_misc_jammer); });
-    registerRoute("/web_serial", []() { sendHtmlAndExecute(html_webserial); });
-    registerRoute("/misc_jam", miscChannelsHandler);
-    registerRoute("/wifi_selected_jam", wifiChannelsHandler);
-    registerRoute("/wifi_selected_deauth", wifiDeauthChannelsHandler);
-    registerRoute("/rescan", RescanHandler);
+    server.on("/", handleRoot);
+    server.on("/bluetooth_jam", []() { jamHandler(bluetooth_jam, String("Bluetooth Jamming"), bitmap_bluetooth_jam, true, false); });
+    server.on("/drone_jam", []() { jamHandler(drone_jam, String("Drone Jamming"), bitmap_drone_jam, true, false); });
+    server.on("/wifi_jam", []() { jamHandler(wifi_jam, String("WiFi Jamming"), bitmap_wifi_jam, false, false); });
+    server.on("/wifi_deauth_all", []() { attackHandler(String("WiFi Deauthing"), wifi_deauth_all, bitmap_wifi_deauth); });
+    server.on("/wifi_scan_jam", []() { jamHandler(wifi_scan_jam, String("WiFi Jamming"), bitmap_wifi_jam, false, false, false, true); });
+    server.on("/wifi_deauth_scan", []() { attackScanHandler(String("WiFi Deauthing"), wifi_deauth_scan, bitmap_wifi_deauth); });
+    server.on("/wifi_random_spam", []() { attackScanHandler(String("WiFi Beacon Spam"), wifi_beacon_spam_random, bitmap_beacon_spaming); });
+    server.on("/wifi_array_spam", []() { attackScanHandler(String("WiFi Beacon Spam"), wifi_beacon_spam_array, bitmap_beacon_spaming); });
+    server.on("/ble_advertising_jam", []() { jamHandler(ble_advertising_jam, String("BLE Jamming"), bitmap_ble_jam, false, false); });
+    server.on("/ble_data_jam", []() { jamHandler(ble_data_jam, String("BLE Jamming"), bitmap_ble_jam, true, false); });
+    server.on("/zigbee_jam", []() { jamHandler(zigbee_jam, String("Zigbee Jamming"), bitmap_zigbee_jam, false, false); });
+    server.on("/web_serial", []() { sendHtmlAndExecute(html_webserial); });
+    server.on("/misc_jam", miscChannelsHandler);
+    server.on("/wifi_selected_jam", wifiChannelsHandler);
+    server.on("/wifi_selected_deauth", wifiDeauthChannelsHandler);
+    server.on("/rescan", RescanHandler);
 
-    registerRoute("/setting_display", []() { settingsHandler(html_settings, display_setting, true, 4); });
-    registerRoute("/setting_bluetooth_jam", []() { settingsHandler(html_settings, bluetooth_jam_method, true, 5); });
-    registerRoute("/setting_drone_jam", []() { settingsHandler(html_settings, drone_jam_method, true, 6); });
-    registerRoute("/setting_separate_together", []() { settingsHandler(html_settings, Separate_or_together, true, 7); });
-    registerRoute("/setting_misc_jam", []() { settingsHandler(html_settings, misc_jam_method, true, 3); });
-    registerRoute("/setting_logo", []() { settingsHandler(html_settings, logo, true, 2); });
-    registerRoute("/setting_buttons", []() { settingsHandler(html_settings, buttons, true, 1); });
-    registerRoute("/setting_nrf_pa", []() { settingsHandler(html_settings, nrf_pa, true, 8); });
-    registerRoute("/setting_array_spam", []() { settingsHandler(html_spam_array, 0, false, 9); });
+    server.on("/settings", []() { settingsHandler(FPSTR(html_settings), 0); });
 
-    registerRoute("/OTA", []() { settingsHandler(html_ota, 1010110, false, 0); });
-    registerRoute("/ble_select", []() { settingsHandler(html_ble_select, 0, false, 0); });
-    registerRoute("/wifi_select", []() { settingsHandler(html_wifi_select, 0, false, 0); });
-    registerRoute("/wifi_channel", WiFiChannelHandler);
-    registerRoute("/wifi_deauth_channel", WiFiDeauthChannelHandler);
-    registerRoute("/wifi_settings", []() { settingsHandler(html_wifi_settings, wifi_jam_method, true, 0); });
-    registerRoute("/nrf24_settings", []() { nRF24SettingsHandler(); });
+    server.on("/OTA", []() { settingsHandler(html_ota, 1010110); });
 
-    registerRoute("/WebCommand", HandleWebCommand);
+    server.on("/WebCommand", HandleWebCommand);
 
-    registerRoute("/generate_204", handleRoot);
-    registerRoute("/redirect", handleRoot);
-    registerRoute("/hotspot-detect.html", handleRoot);
-    registerRoute("/canonical.html", handleRoot);
-    registerRoute("/ncsi.txt", handleRoot);
+    server.on("/generate_204", handleRoot);
+    server.on("/redirect", handleRoot);
+    server.on("/hotspot-detect.html", handleRoot);
+    server.on("/canonical.html", handleRoot);
+    server.on("/ncsi.txt", handleRoot);
 
     server.on(
         "/update", HTTP_POST, []() {
@@ -1527,32 +1359,7 @@ void setup()
         handleFileUpload
     );
 
-    server.on("/save_wifi_settings", handleSaveWiFiSettings);
-    server.on("/reset_wifi_settings", handleResetWiFiSettings);
-
-    registerRoute("/bluetooth_method_0", []() { storeEEPROMAndSet("bl_jam_configs", 0, bluetooth_jam_method); });
-    registerRoute("/bluetooth_method_1", []() { storeEEPROMAndSet("bl_jam_configs", 1, bluetooth_jam_method); });
-    registerRoute("/bluetooth_method_2", []() { storeEEPROMAndSet("bl_jam_configs", 2, bluetooth_jam_method); });
-    registerRoute("/drone_method_0", []() { storeEEPROMAndSet("drone_jam_configs", 0, drone_jam_method); });
-    registerRoute("/drone_method_1", []() { storeEEPROMAndSet("drone_jam_configs", 1, drone_jam_method); });
-    registerRoute("/separate_or_together_method_0", []() { storeEEPROMAndSet("SorT_configs", 0, Separate_or_together); });
-    registerRoute("/separate_or_together_method_1", []() { storeEEPROMAndSet("SorT_configs", 1, Separate_or_together); });
-    registerRoute("/misc_method_0", []() { storeEEPROMAndSet("mics_jam_configs", 0, misc_jam_method); });
-    registerRoute("/misc_method_1", []() { storeEEPROMAndSet("mics_jam_configs", 1, misc_jam_method); });
-    registerRoute("/logo_on", []() { storeEEPROMAndSet("logo_configs", 0, logo); });
-    registerRoute("/logo_off", []() { storeEEPROMAndSet("logo_configs", 1, logo); });
-    registerRoute("/enable_display", []() { storeEEPROMAndReset("display_configs", 0, display_setting); });
-    registerRoute("/disable_display", []() { storeEEPROMAndReset("display_configs", 1, display_setting); });
-    registerRoute("/button_method_0", []() { storeEEPROMAndSet("buttons_configs", 0, buttons); });
-    registerRoute("/button_method_1", []() { storeEEPROMAndSet("buttons_configs", 1, buttons); });
-    registerRoute("/button_method_2", []() { storeEEPROMAndSet("buttons_configs", 2, buttons); });
-    registerRoute("/nrf_pa_0", []() { storeEEPROMAndSet("PA_configs", 0, nrf_pa); });
-    registerRoute("/nrf_pa_1", []() { storeEEPROMAndSet("PA_configs", 1, nrf_pa); });
-    registerRoute("/nrf_pa_2", []() { storeEEPROMAndSet("PA_configs", 2, nrf_pa); });
-    registerRoute("/nrf_pa_3", []() { storeEEPROMAndSet("PA_configs", 3, nrf_pa); });
-    registerRoute("/access_point_off", []() { access_poin_off(); });
-    registerRoute("/set_nrf24_pins", []() { handlernRF24Pins(); });
-    registerRoute("/setting_array", []() { handlerSSIDsArray(); });
+    server.on("/set_settings", []() { handlerSetSettings(); });
 
     server.begin();
     webServerStarted = true;
@@ -1674,7 +1481,7 @@ void executeAction(int menuNum)
     jamHandler(zigbee_jam, String("Zigbee Jamming"), bitmap_zigbee_jam, false, false);
     break;
   case 6:
-    storeEEPROMAndSet("AP_configs", 0, logo);
+    prefs.putInt("AP_configs", 0);
     break;
   default:
     break;

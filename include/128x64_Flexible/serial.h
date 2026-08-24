@@ -22,9 +22,7 @@ bool        handleSetArray(String *args, int argCount, bool web_command, String 
 void attackHandler(String htmlResponse, void (*attackFunc)(), const uint8_t *bitmap);
 void attackScanHandler(String htmlResponse, void (*attackFunction)(), const unsigned char *bitmap);
 void storeEEPROMAndSet(const char *index, int value, int &targetVar);
-void access_poin_off();
 void updateDisplay(int menuNum);
-void storeEEPROMAndReset(const char *index, int value, int &targetVar);
 void sendHtmlAndExecute(const char *htmlResponse, void (*action)());
 
 #endif

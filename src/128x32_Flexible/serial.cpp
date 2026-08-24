@@ -735,7 +735,7 @@ bool handleSetCommand(String *args, int argCount, bool web_command, String &resp
       printLine("Value must be 0-2", response, web_command);
       return true;
     }
-    storeEEPROMAndSet("bl_jam_configs", val, bluetooth_jam_method);
+    storeEEPROMAndSet("bt_configs", val, bluetooth_jam_method);
     printLine("Bluetooth method set to " + String(val), response, web_command);
     return true;
   }
@@ -758,7 +758,7 @@ bool handleSetCommand(String *args, int argCount, bool web_command, String &resp
       printLine("Value must be 0-1", response, web_command);
       return true;
     }
-    storeEEPROMAndSet("drone_jam_configs", val, drone_jam_method);
+    storeEEPROMAndSet("drone_configs", val, drone_jam_method);
     printLine("Drone method set to " + String(val), response, web_command);
     return true;
   }
@@ -781,7 +781,7 @@ bool handleSetCommand(String *args, int argCount, bool web_command, String &resp
       printLine("Value must be 0-1", response, web_command);
       return true;
     }
-    storeEEPROMAndSet("mics_jam_configs", val, misc_jam_method);
+    storeEEPROMAndSet("misc_configs", val, misc_jam_method);
     printLine("Misc method set to " + String(val), response, web_command);
     return true;
   }
@@ -829,7 +829,7 @@ bool handleSetCommand(String *args, int argCount, bool web_command, String &resp
     }
     if ( val == 1 )
     {
-      access_poin_off();
+      prefs.putInt("AP_configs", val);
     }
     else
     {
@@ -884,7 +884,7 @@ bool handleSetCommand(String *args, int argCount, bool web_command, String &resp
       printLine("Value must be 0-1", response, web_command);
       return true;
     }
-    storeEEPROMAndReset("display_configs", val, display_setting);
+    storeEEPROMAndSet("display_configs", val, display_setting);
     return true;
   }
 

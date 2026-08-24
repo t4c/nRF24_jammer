@@ -488,7 +488,7 @@ void misc_jam()
   vTaskDelete(NULL);
 }
 
-void jamHandler(void (*action)(), String htmlResponse, const unsigned char *bitmap, bool CW, bool mode, bool isMisc, bool scan, int ch1, int ch2)
+bool jamHandler(void (*action)(), String htmlResponse, const unsigned char *bitmap, bool CW, bool mode, bool isMisc, bool scan, int ch1, int ch2)
 {
   global_ch1              = ch1;
   global_ch2              = ch2;
@@ -496,9 +496,12 @@ void jamHandler(void (*action)(), String htmlResponse, const unsigned char *bitm
   String       html       = FPSTR(html_jam);
   TaskHandle_t TaskHandle = NULL;
 
-  display.clearDisplay();
-  display.drawBitmap(0, 0, bitmap, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
-  display.display();
+  if ( !isMisc )
+  {
+    display.clearDisplay();
+    display.drawBitmap(0, 0, bitmap, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
+    display.display();
+  }
 
   html.replace("[||]EdItAbLe TeXt[||]", htmlResponse);
   server.send(200, "text/html", html.c_str());
@@ -543,14 +546,22 @@ void jamHandler(void (*action)(), String htmlResponse, const unsigned char *bitm
   btnOK.tick();
   btnPrevious.tick();
   bool SerialStop = true;
+  bool exit       = false;
 
-  while ( !btnOK.isSingle() && SerialStop )
+  while ( !exit && SerialStop )
   {
     randomSeed(esp_random() + millis());
     btnNext.tick();
     btnOK.tick();
     btnPrevious.tick();
     SerialStop = SerialCommands();
+
+    if ( btnOK.isSingle() )
+    {
+      exit = true;
+      break;
+    }
+
     if ( (btnNext.isSingle() || btnPrevious.isSingle() || btnOK.isDouble()) && mode )
       break;
     delay(1);
@@ -582,4 +593,6 @@ void jamHandler(void (*action)(), String htmlResponse, const unsigned char *bitm
   btnOK.tick();
   btnPrevious.tick();
   updateDisplay(menu_number);
+
+  return exit;
 }

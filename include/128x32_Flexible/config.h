@@ -20,8 +20,11 @@
 
 #define default_ssid "jammer"
 #define default_password "W0rthlessS0ul"
-#define Version_Number "V3.3.0"
+#define Version_Number "V3.4.0"
 #define Version_Name "Flexible"
+
+inline String ssid;
+inline String password;
 
 inline int menu_number;
 inline int display_setting;
